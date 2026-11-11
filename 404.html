@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SMLM CONNECT</title>
+  <script>
+    // GitHub Pages SPA redirect
+    // Redirect path from 404 to root index.html preserving URL path
+    (function () {
+      var path = window.location.pathname;
+      var repo = "/smlm-connect";
+      var subpath = path;
+      if (path.indexOf(repo) === 0) {
+        subpath = path.slice(repo.length);
+      }
+      var clean = subpath.replace(/^\/+/, "");
+      var target = (path.indexOf(repo) === 0 ? repo + "/?" : "/?") + clean + (window.location.search ? "&" + window.location.search.slice(1) : "") + window.location.hash;
+      window.location.replace(target);
+    })();
+  </script>
+</head>
+<body>
+</body>
+</html>
+

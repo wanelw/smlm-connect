@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMLM CONNECT — Social Media &amp; Learning Motivation</title>
+  <meta name="description" content="Decoding Digital Habits, Empowering Academic Growth" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script>
+    // GitHub Pages SPA restore URL
+    (function () {
+      var search = window.location.search;
+      if (search && search.charAt(1) !== "") {
+        var query = search.slice(1).split("&")[0];
+        if (query && query.indexOf("=") < 0) {
+          var cleanPath = "/" + query;
+          var restSearch = search.slice(1).split("&").slice(1).join("&");
+          var newSearch = restSearch ? "?" + restSearch : "";
+          var base = window.location.pathname.replace(/\/+$/, "");
+          window.history.replaceState(null, null, base + cleanPath + newSearch + window.location.hash);
+        }
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="lang-switcher"></div>
+  <div id="modal-root"></div>
+
+  <!-- Supabase JS Client & Classic scripts (works via file:// and http) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/translations.js"></script>
+  <script src="js/questions.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
