@@ -16,37 +16,18 @@
         return Promise.reject(new Error("Supabase client not loaded"));
       }
       return Promise.all([
-        supa.from("participants").select("id"),
-        supa.from("commitments").select("id"),
-        supa.from("ratings").select("rating")
+        Promise.resolve(supa.from("participants").select("id")),
+        Promise.resolve(supa.from("commitments").select("id")),
+        Promise.resolve(supa.from("ratings").select("rating, deviceId"))
       ]).then(function (results) {
-        var partData = results[0].data || [];
-        var commData = results[1].data || [];
-        var ratings = results[2].data || [];
+        var partData = (results[0] && !results[0].error && results[0].data) || [];
+        var commData = (results[1] && !results[1].error && results[1].data) || [];
+        var ratings = (results[2] && !results[2].error && results[2].data) || [];
 
-        // Gabungkan juga dengan data lokal sebagai jaminan jika offline / device sendiri
-        var localParts = jget("allParticipants", []);
-        var localComms = jget("commitments", []);
-        var localRatings = jget("allSatisfactionRatings", []);
-
-        // Union partCount berdasarkan id unik
-        var allPartIds = new Set();
-        partData.forEach(function (x) { if (x.id) allPartIds.add(x.id); });
-        localParts.forEach(function (x) { if (x.id) allPartIds.add(x.id); });
-
-        var allCommIds = new Set();
-        commData.forEach(function (x) { if (x.id) allCommIds.add(x.id); });
-        localComms.forEach(function (x) { if (x.id) allCommIds.add(x.id); });
-
-        // Hitung rating
+        // Hitung rating unik berdasarkan deviceId
         var allRatingsMap = {};
         ratings.forEach(function (x) {
           if (x.deviceId) allRatingsMap[x.deviceId] = x.rating;
-        });
-        localRatings.forEach(function (x) {
-          if (x.deviceId && allRatingsMap[x.deviceId] == null) {
-            allRatingsMap[x.deviceId] = x.rating;
-          }
         });
         var ratingVals = Object.values(allRatingsMap);
         var avg = ratingVals.length
@@ -54,8 +35,8 @@
           : "-";
 
         return {
-          totalParticipants: allPartIds.size,
-          totalCommitments: allCommIds.size,
+          totalParticipants: partData.length,
+          totalCommitments: commData.length,
           avgSatisfaction: avg
         };
       });
@@ -70,33 +51,35 @@
         instance: p.school || p.instance || "",
         answers: p.answers,
         deviceId: p.deviceId,
-        createdAt: p.timestamp || new Date().toISOString()
+        createdAt: p.timestamp || p.createdAt || new Date().toISOString()
       };
-      return supa.from("participants").upsert(doc);
+      return Promise.resolve(supa.from("participants").upsert(doc)).then(function (res) {
+        if (res.error) throw res.error;
+        return res.data;
+      });
     },
 
     // 3. Simpan / Perbarui Rating Kepuasan
     addRating: function (deviceId, rating) {
       if (!supa) return Promise.reject(new Error("Supabase client not loaded"));
-      return supa.from("ratings").upsert({
+      return Promise.resolve(supa.from("ratings").upsert({
         deviceId: deviceId,
         rating: rating,
         createdAt: new Date().toISOString()
-      }, { onConflict: "deviceId" });
+      }, { onConflict: "deviceId" })).then(function (res) {
+        if (res.error) throw res.error;
+        return res.data;
+      });
     },
 
     // 4. Ambil Semua Komitmen
     getCommitments: function () {
       if (!supa) return Promise.reject(new Error("Supabase client not loaded"));
-      return supa.from("commitments").select("*").order("createdAt", { ascending: false }).then(function (res) {
-        if (res.error) {
-          return supa.from("commitments").select("*").then(function (r2) {
-            if (r2.error) throw r2.error;
-            return r2.data || [];
-          });
-        }
+      return Promise.resolve(supa.from("commitments").select("*").order("createdAt", { ascending: false })).then(function (res) {
+        if (res.error) throw res.error;
         return (res.data || []).map(function (c) {
           if (!c.timestamp && c.createdAt) c.timestamp = c.createdAt;
+          if (!c.school && c.instance) c.school = c.instance;
           return c;
         });
       });
@@ -105,38 +88,39 @@
     // 5. Tambah Komitmen Baru
     addCommitment: function (c) {
       if (!supa) return Promise.reject(new Error("Supabase client not loaded"));
-      var now = c.timestamp || new Date().toISOString();
-      return supa.from("commitments").insert({
+      var now = c.timestamp || c.createdAt || new Date().toISOString();
+      return Promise.resolve(supa.from("commitments").insert({
         id: c.id,
         text: c.text,
         author: c.author,
-        instance: c.school || "",
+        instance: c.school || c.instance || "",
         createdAt: now,
         color: c.color,
         edited: false,
         deviceId: c.deviceId
+      })).then(function (res) {
+        if (res.error) throw res.error;
+        return res.data;
       });
     },
 
     // 6. Edit Teks Komitmen
     editCommitment: function (id, text) {
       if (!supa) return Promise.reject(new Error("Supabase client not loaded"));
-      return supa.from("commitments").update({
+      return Promise.resolve(supa.from("commitments").update({
         text: text,
         edited: true
-      }).eq("id", id);
+      }).eq("id", id)).then(function (res) {
+        if (res.error) throw res.error;
+        return res.data;
+      });
     },
 
     // 7. Ambil Semua Data Peserta
     getParticipants: function () {
       if (!supa) return Promise.reject(new Error("Supabase client not loaded"));
-      return supa.from("participants").select("*").order("createdAt", { ascending: false }).then(function (res) {
-        if (res.error) {
-          return supa.from("participants").select("*").then(function (r2) {
-            if (r2.error) throw r2.error;
-            return r2.data || [];
-          });
-        }
+      return Promise.resolve(supa.from("participants").select("*").order("createdAt", { ascending: false })).then(function (res) {
+        if (res.error) throw res.error;
         return (res.data || []).map(function (p) {
           if (!p.school && p.instance) p.school = p.instance;
           if (!p.timestamp && p.createdAt) p.timestamp = p.createdAt;
@@ -149,7 +133,10 @@
     deleteItem: function (kind, id) {
       if (!supa) return Promise.reject(new Error("Supabase client not loaded"));
       var table = kind === "commitment" ? "commitments" : "participants";
-      return supa.from(table).delete().eq("id", id);
+      return Promise.resolve(supa.from(table).delete().eq("id", id)).then(function (res) {
+        if (res.error) throw res.error;
+        return res.data;
+      });
     }
   };
 
@@ -857,8 +844,10 @@
         id: did + "-" + Date.now(),
         name: info.name,
         school: info.school,
+        instance: info.school,
         answers: answers,
         timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
         deviceId: did
       };
 
@@ -874,14 +863,22 @@
       }
       jset("allParticipants", all);
 
-      try {
-        DB.saveParticipant(p).catch(console.error);
-      } catch (err) {
-        console.error(err);
-      }
+      // Tampilkan indikator penyimpanan langsung ke Supabase
+      mount('<div class="page">' + navbar("/dashboard") + '<div style="min-height:80vh;display:flex;align-items:center;justify-content:center;text-align:center"><div><div class="spinner"></div><p class="muted" style="margin-top:16px">' + (lang === "en" ? "Saving results to database..." : "Menyimpan hasil ke database...") + '</p></div></div></div>');
 
-      window.history.pushState(null, null, appUrl("/dashboard"));
-      route();
+      DB.saveParticipant(p)
+        .then(function () {
+          toast(lang === "en" ? "Results saved to database!" : "Hasil tes berhasil tersimpan di database!");
+          window.dispatchEvent(new Event("statsUpdated"));
+        })
+        .catch(function (err) {
+          console.error("Supabase saveParticipant error:", err);
+          toast(lang === "en" ? "Saved locally (database sync pending)." : "Tersimpan di lokal (sinkronisasi database tertunda).");
+        })
+        .finally(function () {
+          window.history.pushState(null, null, appUrl("/dashboard"));
+          route();
+        });
     }
     form();
   }
@@ -890,15 +887,41 @@
   function Dashboard() {
     var ok = localStorage.getItem("testCompleted"), ans = jget("testAnswers", null);
     mount('<div class="page">' + navbar("/dashboard") + '<div style="min-height:80vh;display:flex;align-items:center;justify-content:center;text-align:center"><div><div class="spinner"></div><p class="muted">' + t("dashboard.loading") + "</p></div></div></div>");
-    if (!ok || !ans) {
+
+    function showEmpty() {
       mount('<div class="page">' + navbar("/dashboard") + '<div class="container w-2xl py-16"><div class="card shadow fade center" style="padding:32px"><div class="icon-box bg-p10" style="width:64px;height:64px;border-radius:50%;margin:0 auto 24px">' + ic("alert", "xxl") +
         '</div><h2 style="font-size:24px;font-weight:700;margin-bottom:16px">' + t("dashboard.emptyTitle") + '</h2><p class="muted" style="margin-bottom:32px;line-height:1.7;opacity:.85">' + t("dashboard.emptyDesc") + '</p><a class="btn btn-primary" href="' + appUrl("/test") + '" style="padding:16px 32px">' + t("dashboard.emptyButton") + ic("arrow", "lg") + "</a></div></div></div>");
+    }
+
+    if (!ok || !ans) {
+      var did = deviceId();
+      if (supa) {
+        supa.from("participants").select("*").eq("deviceId", did).order("createdAt", { ascending: false }).limit(1)
+          .then(function (res) {
+            if (res.data && res.data.length > 0) {
+              var p = res.data[0];
+              ans = p.answers || [];
+              jset("testAnswers", ans);
+              jset("userInfo", { name: p.name, school: p.instance || p.school || "" });
+              localStorage.setItem("testCompleted", "true");
+              render();
+            } else {
+              showEmpty();
+            }
+          })
+          .catch(function () {
+            showEmpty();
+          });
+        return;
+      }
+      showEmpty();
       return;
     }
+
     setTimeout(function () {
       if (getCleanPath().indexOf("/dashboard") < 0) return;
       render();
-    }, 1000);
+    }, 400);
     function render() {
       var a = generateAnalysis(ans), name = (jget("userInfo", {}) || {}).name || "", k = a.key;
       var rating = parseInt(localStorage.getItem("satisfactionRating") || "0", 10);
@@ -967,7 +990,14 @@
           }
           jset("allSatisfactionRatings", all);
 
-          DB.addRating(did, r).catch(console.error);
+          DB.addRating(did, r)
+            .then(function () {
+              toast(lang === "en" ? "Rating saved to database! Thank you." : "Rating tersimpan di database! Terima kasih.");
+              window.dispatchEvent(new Event("statsUpdated"));
+            })
+            .catch(function (err) {
+              console.error("Failed to save rating to Supabase:", err);
+            });
         };
       });
     }
@@ -1093,8 +1123,15 @@
           draw(true);
 
           DB.addCommitment(c)
-            .then(fetchAll)
-            .catch(console.error);
+            .then(function () {
+              toast(lang === "en" ? "Commitment saved to database!" : "Komitmen berhasil tersimpan di database!");
+              window.dispatchEvent(new Event("statsUpdated"));
+              return fetchAll();
+            })
+            .catch(function (err) {
+              console.error("Failed to add commitment to Supabase:", err);
+              toast(lang === "en" ? "Failed to save to database." : "Gagal simpan komitmen ke database.");
+            });
         };
       }
       document.querySelectorAll("[data-e]").forEach(function (b) { b.onclick = function () { editModal(b.dataset.e, false, fetchAll); }; });
@@ -1536,7 +1573,46 @@
     navigate("/");
   };
 
+  /* ---------- Auto-sync local cache to Supabase ---------- */
+  function syncLocalToSupabase() {
+    if (!supa) return;
+
+    // 1. Sinkronkan rating yang belum tersimpan
+    var r = localStorage.getItem("satisfactionRating");
+    var did = deviceId();
+    if (r) {
+      DB.addRating(did, parseInt(r, 10)).catch(function () {});
+    }
+
+    // 2. Sinkronkan peserta dari cache lokal ke database Supabase
+    var localParts = jget("allParticipants", []);
+    if (localParts && localParts.length) {
+      DB.getParticipants().then(function (remoteParts) {
+        var remoteIds = new Set((remoteParts || []).map(function (x) { return x.id; }));
+        localParts.forEach(function (lp) {
+          if (lp && lp.id && !remoteIds.has(lp.id)) {
+            DB.saveParticipant(lp).catch(function () {});
+          }
+        });
+      }).catch(function () {});
+    }
+
+    // 3. Sinkronkan komitmen dari cache lokal ke database Supabase
+    var localComms = jget("commitments", []);
+    if (localComms && localComms.length) {
+      DB.getCommitments().then(function (remoteComms) {
+        var remoteIds = new Set((remoteComms || []).map(function (x) { return x.id; }));
+        localComms.forEach(function (lc) {
+          if (lc && lc.id && !remoteIds.has(lc.id)) {
+            DB.addCommitment(lc).catch(function () {});
+          }
+        });
+      }).catch(function () {});
+    }
+  }
+
   document.documentElement.lang = lang;
   switcher();
+  syncLocalToSupabase();
   route();
 })();
