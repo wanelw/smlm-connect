@@ -633,22 +633,42 @@
     drawBar(t("dashboard.distractionLevel"), a.dis, "#EF4444", 1120);
     drawBar(t("dashboard.academicMotivation"), a.mot, "#0096FF", 1220);
 
-    // Convert to Image and trigger download
-    cvs.toBlob(function (blob) {
-      if (!blob) return;
-      var url = URL.createObjectURL(blob);
+    // Helper: trigger browser file download without SPA interference
+    function triggerDownload(href, cleanup) {
       var link = document.createElement("a");
       var safeName = (participantName || "result").toLowerCase().replace(/[^a-z0-9]/g, "_");
       link.download = "smlm_result_" + safeName + "_" + Date.now() + ".png";
-      link.href = url;
+      link.href = href;
+      link.setAttribute("download", link.download);
+      link.style.display = "none";
+      link.onclick = function (ev) {
+        ev.stopPropagation();
+      };
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
       setTimeout(function () {
-        URL.revokeObjectURL(url);
-      }, 2000);
-      toast(lang === "en" ? "Result image downloaded (1920 × 1440)!" : "Gambar hasil (1920 × 1440) berhasil diunduh!");
-    }, "image/png");
+        if (link.parentNode) link.parentNode.removeChild(link);
+        if (typeof cleanup === "function") cleanup();
+      }, 200);
+    }
+
+    // Convert to Image and trigger download
+    try {
+      cvs.toBlob(function (blob) {
+        if (!blob) {
+          triggerDownload(cvs.toDataURL("image/png"));
+          return;
+        }
+        var url = URL.createObjectURL(blob);
+        triggerDownload(url, function () {
+          setTimeout(function () {
+            URL.revokeObjectURL(url);
+          }, 4000);
+        });
+      }, "image/png");
+    } catch (err) {
+      triggerDownload(cvs.toDataURL("image/png"));
+    }
   }
 
   /* ---------- Pages ---------- */
@@ -863,17 +883,15 @@
       }
       jset("allParticipants", all);
 
-      // Tampilkan indikator penyimpanan langsung ke Supabase
-      mount('<div class="page">' + navbar("/dashboard") + '<div style="min-height:80vh;display:flex;align-items:center;justify-content:center;text-align:center"><div><div class="spinner"></div><p class="muted" style="margin-top:16px">' + (lang === "en" ? "Saving results to database..." : "Menyimpan hasil ke database...") + '</p></div></div></div>');
+      // Tampilkan indikator proses
+      mount('<div class="page">' + navbar("/dashboard") + '<div style="min-height:80vh;display:flex;align-items:center;justify-content:center;text-align:center"><div><div class="spinner"></div><p class="muted" style="margin-top:16px">' + (lang === "en" ? "Analyzing results..." : "Menganalisis hasil...") + '</p></div></div></div>');
 
       DB.saveParticipant(p)
         .then(function () {
-          toast(lang === "en" ? "Results saved to database!" : "Hasil tes berhasil tersimpan di database!");
           window.dispatchEvent(new Event("statsUpdated"));
         })
         .catch(function (err) {
           console.error("Supabase saveParticipant error:", err);
-          toast(lang === "en" ? "Saved locally (database sync pending)." : "Tersimpan di lokal (sinkronisasi database tertunda).");
         })
         .finally(function () {
           window.history.pushState(null, null, appUrl("/dashboard"));
@@ -992,7 +1010,6 @@
 
           DB.addRating(did, r)
             .then(function () {
-              toast(lang === "en" ? "Rating saved to database! Thank you." : "Rating tersimpan di database! Terima kasih.");
               window.dispatchEvent(new Event("statsUpdated"));
             })
             .catch(function (err) {
@@ -1124,13 +1141,11 @@
 
           DB.addCommitment(c)
             .then(function () {
-              toast(lang === "en" ? "Commitment saved to database!" : "Komitmen berhasil tersimpan di database!");
               window.dispatchEvent(new Event("statsUpdated"));
               return fetchAll();
             })
             .catch(function (err) {
               console.error("Failed to add commitment to Supabase:", err);
-              toast(lang === "en" ? "Failed to save to database." : "Gagal simpan komitmen ke database.");
             });
         };
       }
@@ -1527,11 +1542,16 @@
 
   // Intercept internal link clicks to use navigate() for smooth SPA transitions
   document.addEventListener("click", function (e) {
+    if (e.defaultPrevented) return;
     var a = e.target.closest("a");
     if (!a || !a.getAttribute("href")) return;
+    if (a.hasAttribute("download") || a.download) return;
+    if (a.target === "_blank") return;
+
     var href = a.getAttribute("href");
-    // Ignore external or non-http links
+    // Ignore external, blob, data, and hash links
     if (href.indexOf("http://") === 0 || href.indexOf("https://") === 0 || href.indexOf("//") === 0 || href.indexOf("mailto:") === 0) return;
+    if (href.indexOf("blob:") === 0 || href.indexOf("data:") === 0 || href.indexOf("javascript:") === 0) return;
     if (href.indexOf("#") === 0) return;
 
     var base = getBasePath();
