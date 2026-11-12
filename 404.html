@@ -14,7 +14,8 @@
         subpath = path.slice(repo.length);
       }
       var clean = subpath.replace(/^\/+/, "");
-      var target = (path.indexOf(repo) === 0 ? repo + "/?" : "/?") + clean + (window.location.search ? "&" + window.location.search.slice(1) : "") + window.location.hash;
+      var isSubfolder = path.indexOf(repo) === 0;
+      var target = (isSubfolder ? repo + "/?" : "/?") + clean + (window.location.search ? "&" + window.location.search.slice(1) : "") + window.location.hash;
       window.location.replace(target);
     })();
   </script>
