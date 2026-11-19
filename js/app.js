@@ -859,6 +859,7 @@
       jset("testAnswers", answers);
       jset("userInfo", info);
       localStorage.setItem("testCompleted", "true");
+      localStorage.removeItem("satisfactionRating");
 
       var p = {
         id: did + "-" + Date.now(),
@@ -986,6 +987,21 @@
       }
 
       starBtns.forEach(function (b) {
+        b.onmouseenter = function () {
+          var val = +b.dataset.r;
+          starBtns.forEach(function (btn) {
+            if (+btn.dataset.r <= val) {
+              btn.classList.add("on");
+            } else {
+              btn.classList.remove("on");
+            }
+          });
+        };
+
+        b.onmouseleave = function () {
+          applyStarRating(rating);
+        };
+
         b.onclick = function (e) {
           e.preventDefault();
           e.stopPropagation();
